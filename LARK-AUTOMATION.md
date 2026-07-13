@@ -23,9 +23,14 @@ Thay `<OWNER>/<REPO>` bằng repo fork của bạn, ví dụ `hoangminhhoagpt-do
 
 Đây là automation duy nhất **bắt buộc** phải có. Bốn cái sau chỉ để tự động đồng bộ.
 
-**Cò kích hoạt:** *Khi bản ghi khớp điều kiện*
-- Bảng: **14.3 Đăng bài tự động**
-- Điều kiện: **`Đăng`** *là* **`Đăng ngay`**
+**Cò kích hoạt:** chọn 1 trong 2 cách —
+
+| Cách | Cò kích hoạt | Khi nào dùng |
+|---|---|---|
+| **A. Nút bấm** (khuyến nghị) | *Khi nhấn nút* → chọn cột nút **`Đăng`** ở bảng 14.3 | Bạn tự tạo cột kiểu **Nút bấm (Button)** trong Lark UI. API không tạo được field này nên `init-tables` không dựng sẵn. |
+| **B. Cột chọn** (mặc định) | *Khi bản ghi khớp điều kiện* → bảng **14.3**, điều kiện **`Đăng`** *là* **`Đăng ngay`** | Dùng ngay cột `Đăng` mà `init-tables` đã tạo. Đăng xong hệ thống tự hạ cờ về trống. |
+
+Engine hiểu cả hai, không phải sửa gì.
 
 **Hành động:** Gửi yêu cầu HTTP (khai như phần chung), Body:
 
@@ -39,11 +44,11 @@ Thay `<OWNER>/<REPO>` bằng repo fork của bạn, ví dụ `hoangminhhoagpt-do
 > Chỗ `<<chèn biến Record ID>>`: **xoá đi rồi bấm nút chèn biến** của Lark (biểu tượng `+` hoặc `@` trong ô Body) → chọn bảng 14.3 → chọn cột **`Record ID`**. Cột này đã được `init-tables` tạo sẵn (công thức `RECORD_ID()`), nên luôn chọn được. Nhớ giữ nguyên **hai dấu nháy kép** bao quanh biến.
 
 **Cách dùng hằng ngày:**
-1. Thêm 1 dòng ở bảng 14.3: chọn **Page**, chọn **Loại**, gõ **Nội dung**, kéo file vào **Ảnh/video**.
-2. Đổi cột **`Đăng`** → **`Đăng ngay`**.
-3. Khoảng 30–60 giây sau, dòng đó tự có **Trạng thái = Thành công** và **Link bài đăng**. Cột `Đăng` tự hạ về trống để không đăng lại lần nữa.
+1. Thêm 1 dòng ở bảng 14.3: chọn **Page** (chọn **bao nhiêu Page cũng được** — bài sẽ đăng lên tất cả), chọn **Loại**, gõ **Nội dung**, kéo file vào **Ảnh/video**.
+2. Bấm nút **`Đăng`** (hoặc đổi cột `Đăng` → `Đăng ngay`).
+3. Khoảng 30–60 giây sau, dòng đó tự có **Trạng thái = Thành công** và **Link bài đăng**. Cột **`Log`** liệt kê link của **từng Page**.
 
-Nếu **Trạng thái = Thất bại**, đọc cột **`Log`** — lỗi ghi bằng tiếng Việt, nói rõ thiếu gì.
+Nếu **Trạng thái = Thất bại**, đọc cột **`Log`** — nó chỉ rõ Page nào hỏng vì sao. **Cứ bấm đăng lại**: Page đã đăng xong sẽ bị bỏ qua, chỉ đăng nốt Page còn thiếu, không bao giờ đăng trùng.
 
 ---
 
