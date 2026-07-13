@@ -3,9 +3,10 @@
 /*
  * fetch-adaccounts.js — Lấy danh sách tài khoản quảng cáo + tổng chi tiêu về bảng "14.4".
  *
- *   node scripts/fetch-adaccounts.js            thêm tài khoản mới
- *   node scripts/fetch-adaccounts.js --update   làm mới tổng chi tiêu của tài khoản đã có (nên chạy định kỳ)
- *   node scripts/fetch-adaccounts.js --dry-run  chỉ in, không ghi Base
+ *   node scripts/fetch-adaccounts.js                 UPSERT theo Account ID: tài khoản đã có → cập nhật
+ *                                                    tổng chi tiêu, tài khoản chưa có → tạo mới
+ *   node scripts/fetch-adaccounts.js --skip-existing chỉ thêm tài khoản mới
+ *   node scripts/fetch-adaccounts.js --dry-run       chỉ in, không ghi Base
  *
  * Lưu ý tiền tệ: Facebook trả amount_spent theo ĐƠN VỊ NHỎ NHẤT (VND không có số lẻ nên = đồng).
  * Cột VAT / Chi tiêu (VAT) trong bảng là CÔNG THỨC — tự tính, engine không ghi vào.
@@ -14,7 +15,8 @@ const L = require('./lib/lark');
 const FB = require('./lib/fb');
 
 const DRY = process.argv.includes('--dry-run');
-const UPDATE = process.argv.includes('--update');
+// Mặc định UPSERT: tổng chi tiêu tăng mỗi ngày, chạy lại là phải làm mới.
+const SKIP_EXISTING = process.argv.includes('--skip-existing');
 const HINT = process.env.TABLE_ADS_ACCOUNT || '14.4';
 const STATUS = { 1: 'Đang hoạt động', 2: 'Tạm dừng', 3: 'Tạm dừng', 7: 'Tạm dừng', 9: 'Tạm dừng', 101: 'Tạm dừng' };
 
@@ -52,7 +54,7 @@ const STATUS = { 1: 'Đang hoạt động', 2: 'Tạm dừng', 3: 'Tạm dừng'
   const toCreate = [], toUpdate = [];
   for (const a of accs) {
     const hit = byId.get(a.account_id);
-    if (hit) { if (UPDATE) toUpdate.push({ record_id: hit, fields: row(a) }); }
+    if (hit) { if (!SKIP_EXISTING) toUpdate.push({ record_id: hit, fields: row(a) }); }
     else toCreate.push({ fields: row(a) });
   }
 

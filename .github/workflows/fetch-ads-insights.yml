@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Để trống = chạy thường | --update = ghi đè dữ liệu cũ | --dry-run = chạy thử'
+        description: 'Để trống = UPSERT (có thì cập nhật, chưa có thì tạo mới) | --skip-existing = chỉ thêm mới | --dry-run = chạy thử'
         required: false
         default: ''
       date_preset:

@@ -4,9 +4,10 @@
  * fetch-posts.js — Lấy bài đã đăng của TẤT CẢ Page trong bảng 14.1 về bảng "14.2",
  * kèm số liệu tương tác tách theo từng loại cảm xúc (LIKE/LOVE/HAHA/WOW/SAD/ANGRY/CARE).
  *
- *   node scripts/fetch-posts.js            chỉ thêm bài mới
- *   node scripts/fetch-posts.js --update   làm mới số liệu của cả bài đã có (share/cmt/reaction thay đổi theo thời gian)
- *   node scripts/fetch-posts.js --dry-run  chỉ in, không ghi Base
+ *   node scripts/fetch-posts.js                 UPSERT theo Post-ID: bài đã có → cập nhật số liệu
+ *                                               (like/share/comment đổi theo thời gian), bài chưa có → tạo mới
+ *   node scripts/fetch-posts.js --skip-existing chỉ thêm bài mới, không đụng bài đã có (chạy nhanh hơn)
+ *   node scripts/fetch-posts.js --dry-run       chỉ in, không ghi Base
  *
  * Biến: POSTS_PER_PAGE (mặc định 50 bài/Page, 0 = lấy hết), POSTS_THUMBNAIL=false để bỏ qua tải ảnh bìa (chạy nhanh hơn).
  */
@@ -14,7 +15,8 @@ const L = require('./lib/lark');
 const FB = require('./lib/fb');
 
 const DRY = process.argv.includes('--dry-run');
-const UPDATE = process.argv.includes('--update');
+// Mặc định UPSERT: số liệu tương tác của bài cũ luôn thay đổi, chạy lại là phải làm mới.
+const SKIP_EXISTING = process.argv.includes('--skip-existing');
 const HINT = process.env.TABLE_POSTS || '14.2';
 const PAGES_HINT = process.env.TABLE_PAGES || '14.1';
 const PER_PAGE = parseInt(process.env.POSTS_PER_PAGE || '50', 10);
@@ -92,7 +94,7 @@ const rc = (p, k) => n(p[k] && p[k].summary && p[k].summary.total_count);
   };
 
   const isNew = p => !byId.has(p.id);
-  const targets = UPDATE ? all : all.filter(isNew);
+  const targets = SKIP_EXISTING ? all.filter(isNew) : all;
 
   // Ảnh bìa: chỉ tải cho bài MỚI (bài cũ đã có ảnh rồi) và chỉ khi bảng thật sự có cột Thumbnail.
   const thumbs = new Map();

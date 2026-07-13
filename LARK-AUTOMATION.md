@@ -67,10 +67,10 @@ Không truyền `record_id` thì hệ thống quét cả bảng và **chỉ đă
 **Cò kích hoạt:** *Theo lịch* → mỗi ngày, ví dụ **7:00 sáng**
 
 ```json
-{"event_type":"fetch-posts","client_payload":{"mode":"--update","posts_per_page":50}}
+{"event_type":"fetch-posts","client_payload":{"posts_per_page":50}}
 ```
 
-`--update` để số like/share/comment của bài cũ được làm mới, chứ không chỉ thêm bài mới.
+Bài đã có trong bảng thì **số like/share/comment tự được cập nhật lại**, bài mới thì thêm dòng — đó là hành vi mặc định, không cần cờ gì thêm.
 
 ---
 
@@ -93,13 +93,13 @@ Lần **đầu tiên** muốn kéo về toàn bộ lịch sử thì chạy tay m
 **Cò kích hoạt:** *Theo lịch* → mỗi tuần
 
 ```json
-{"event_type":"fetch-adaccounts","client_payload":{"mode":"--update"}}
+{"event_type":"fetch-adaccounts","client_payload":{}}
 ```
 
 Thêm 1 automation nữa (hoặc 1 hành động HTTP thứ hai trong cùng automation) để làm mới token Page:
 
 ```json
-{"event_type":"fetch-pages","client_payload":{"mode":"--update"}}
+{"event_type":"fetch-pages","client_payload":{}}
 ```
 
 ---

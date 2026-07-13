@@ -3,9 +3,10 @@
 /*
  * fetch-pages.js — Lấy danh sách Fanpage (kèm access_token riêng của từng Page) về bảng "14.1".
  *
- *   node scripts/fetch-pages.js            thêm Page mới, không đụng Page đã có
- *   node scripts/fetch-pages.js --update   ghi đè lại token + thông tin (token Page có thể đổi)
- *   node scripts/fetch-pages.js --dry-run  chỉ in ra, không ghi Base
+ *   node scripts/fetch-pages.js                 UPSERT theo ID: Page đã có → cập nhật (làm mới token),
+ *                                               Page chưa có → tạo dòng mới
+ *   node scripts/fetch-pages.js --skip-existing chỉ thêm Page mới, không đụng Page đã có
+ *   node scripts/fetch-pages.js --dry-run       chỉ in ra, không ghi Base
  *
  * Đây là engine PHẢI chạy ĐẦU TIÊN: mọi việc đăng bài đều lấy token Page từ bảng này.
  */
@@ -13,7 +14,8 @@ const L = require('./lib/lark');
 const FB = require('./lib/fb');
 
 const DRY = process.argv.includes('--dry-run');
-const UPDATE = process.argv.includes('--update');
+// Mặc định là UPSERT. Token Page đổi theo thời gian nên chạy lại phải làm mới, không được bỏ qua.
+const SKIP_EXISTING = process.argv.includes('--skip-existing');
 const HINT = process.env.TABLE_PAGES || '14.1';
 
 (async () => {
@@ -53,12 +55,11 @@ const HINT = process.env.TABLE_PAGES || '14.1';
   const toCreate = [], toUpdate = [];
   for (const p of pages) {
     const hit = byId.get(p.id);
-    if (hit) { if (UPDATE) toUpdate.push({ record_id: hit, fields: row(p) }); }
+    if (hit) { if (!SKIP_EXISTING) toUpdate.push({ record_id: hit, fields: row(p) }); }
     else toCreate.push({ fields: row(p) });
   }
 
   const added = await L.batchCreate(tk, table, toCreate);
   const updated = await L.batchUpdate(tk, table, toUpdate);
   L.log(`Xong. Thêm ${added} Page, cập nhật ${updated}, bỏ qua ${pages.length - added - updated}.`);
-  if (!UPDATE && pages.length - added > 0) L.log('  (Muốn làm mới token của Page đã có → chạy lại với mode "--update".)');
 })().catch(e => { console.error('\n✖ ' + (e.message || e)); process.exit(1); });
