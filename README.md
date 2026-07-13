@@ -13,6 +13,30 @@ Mỗi việc là một **action gọi bằng HTTP**, nên Lark Base bấm nút l
 | 4 | `fetch-adaccounts` | Lấy tài khoản quảng cáo + tổng chi tiêu | 14.4 |
 | 5 | `fetch-ads-insights` | Lấy số liệu quảng cáo theo từng ngày | 14.5 |
 
+## Khởi tạo nhanh nhất — 1 lệnh
+
+Điền 4 giá trị vào đầu file rồi chạy. Script làm hết 5 bước: tạo bảng → lấy Page → tài khoản ads → số liệu ads theo ngày → bài viết.
+
+```bash
+git clone https://github.com/hoangminhhoagpt-dot/mentor-club-facebook
+cd mentor-club-facebook
+```
+
+```powershell
+# Windows — mở khoi-tao.ps1, điền 4 giá trị, rồi:
+.\khoi-tao.ps1
+```
+
+```bash
+# macOS / Linux — mở khoi-tao.sh, điền 4 giá trị, rồi:
+bash khoi-tao.sh
+```
+
+Bốn giá trị cần điền: `LARK_APP_ID`, `LARK_APP_SECRET`, `LARK_BASE_ID`, `FB_USER_TOKEN`.
+Chạy lại bao nhiêu lần cũng được — **không tạo bảng trùng, không tạo dòng trùng**.
+
+Muốn chạy trên đám mây (Lark bấm nút là đăng, không cần bật máy) thì đọc [TRIEN-KHAI.md](TRIEN-KHAI.md).
+
 ## Bắt đầu
 
 | Bạn muốn | Đọc file |
