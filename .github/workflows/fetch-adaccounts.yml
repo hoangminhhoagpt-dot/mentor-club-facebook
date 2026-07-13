@@ -1,0 +1,41 @@
+name: fetch-adaccounts
+
+# Gọi qua HTTP:  POST https://api.github.com/repos/<OWNER>/<REPO>/dispatches
+#   body: {"event_type":"fetch-adaccounts","client_payload":{...}}
+# Hoặc bấm tay: tab Actions → fetch-adaccounts → Run workflow.
+
+on:
+  repository_dispatch:
+    types: [fetch-adaccounts]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Để trống = chạy thường | --update = ghi đè dữ liệu cũ | --dry-run = chạy thử'
+        required: false
+        default: ''
+
+
+concurrency:
+  group: fetch-adaccounts
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Lấy tài khoản quảng cáo về bảng 14.4
+        env:
+          # Bí mật — Settings → Secrets and variables → Actions → Secrets
+          LARK_APP_SECRET: ${{ secrets.LARK_APP_SECRET }}
+          FB_USER_TOKEN:   ${{ secrets.FB_USER_TOKEN }}
+          # Cấu hình — Settings → Secrets and variables → Actions → Variables
+          LARK_APP_ID:     ${{ github.event.client_payload.lark_app_id || vars.LARK_APP_ID }}
+          LARK_BASE_ID:    ${{ github.event.client_payload.base_id || vars.LARK_BASE_ID }}
+          LARK_DOMAIN:     ${{ vars.LARK_DOMAIN }}
+          TABLE_ADS_ACCOUNT: ${{ github.event.client_payload.table_ads_account || vars.TABLE_ADS_ACCOUNT }}
+        run: node scripts/fetch-adaccounts.js ${{ github.event.client_payload.mode || github.event.inputs.mode }}

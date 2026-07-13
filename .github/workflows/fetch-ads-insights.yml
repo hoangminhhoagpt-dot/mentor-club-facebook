@@ -1,0 +1,48 @@
+name: fetch-ads-insights
+
+# Gọi qua HTTP:  POST https://api.github.com/repos/<OWNER>/<REPO>/dispatches
+#   body: {"event_type":"fetch-ads-insights","client_payload":{...}}
+# Hoặc bấm tay: tab Actions → fetch-ads-insights → Run workflow.
+
+on:
+  repository_dispatch:
+    types: [fetch-ads-insights]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Để trống = chạy thường | --update = ghi đè dữ liệu cũ | --dry-run = chạy thử'
+        required: false
+        default: ''
+      date_preset:
+        description: 'today | yesterday | last_7d | last_30d | last_90d | this_month | last_month | maximum'
+        required: false
+        default: 'last_30d'
+
+concurrency:
+  group: fetch-ads-insights
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Lấy số liệu quảng cáo theo ngày về bảng 14.5
+        env:
+          # Bí mật — Settings → Secrets and variables → Actions → Secrets
+          LARK_APP_SECRET: ${{ secrets.LARK_APP_SECRET }}
+          FB_USER_TOKEN:   ${{ secrets.FB_USER_TOKEN }}
+          # Cấu hình — Settings → Secrets and variables → Actions → Variables
+          LARK_APP_ID:     ${{ github.event.client_payload.lark_app_id || vars.LARK_APP_ID }}
+          LARK_BASE_ID:    ${{ github.event.client_payload.base_id || vars.LARK_BASE_ID }}
+          LARK_DOMAIN:     ${{ vars.LARK_DOMAIN }}
+          TABLE_ADS_DAILY: ${{ github.event.client_payload.table_ads_daily || vars.TABLE_ADS_DAILY }}
+          DATE_PRESET:     ${{ github.event.client_payload.date_preset || github.event.inputs.date_preset }}
+          SINCE:           ${{ github.event.client_payload.since }}
+          UNTIL:           ${{ github.event.client_payload.until }}
+          AD_ACCOUNT_ID:   ${{ github.event.client_payload.ad_account_id || vars.AD_ACCOUNT_ID }}
+        run: node scripts/fetch-ads-insights.js ${{ github.event.client_payload.mode || github.event.inputs.mode }}

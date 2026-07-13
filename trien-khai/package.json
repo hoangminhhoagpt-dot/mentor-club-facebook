@@ -1,0 +1,7 @@
+{
+  "name": "trien-khai-facebook-lark",
+  "private": true,
+  "type": "module",
+  "description": "Triển khai 1 lệnh module Facebook cho khách mới",
+  "dependencies": { "libsodium-wrappers": "^0.7.13" }
+}

@@ -1,0 +1,15 @@
+{
+  "_huong_dan": "Copy file này thành khach.config.json rồi điền. Ô nào không chắc thì để nguyên, script vẫn chạy.",
+
+  "GITHUB_PAT":      "ghp_xxx  (PAT classic, scope repo — của TÀI KHOẢN KHÁCH)",
+  "REPO_NAME":       "mentor-club-facebook",
+
+  "LARK_APP_ID":     "cli_xxx",
+  "LARK_APP_SECRET": "xxx",
+  "LARK_BASE_ID":    "xxx  (chuỗi sau /base/ trên thanh địa chỉ)",
+
+  "FB_USER_TOKEN":   "EAAxxx  (user token dài hạn, đủ quyền pages_* + ads_read)",
+
+  "LARK_DOMAIN":     "",
+  "AD_ACCOUNT_ID":   ""
+}
