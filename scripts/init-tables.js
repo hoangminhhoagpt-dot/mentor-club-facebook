@@ -23,7 +23,9 @@ const money = () => ({ type: T.NUM, ui_type: 'Currency', property: { currency_co
 const date = (f = 'yyyy/MM/dd HH:mm') => ({ type: T.DATE, property: { date_formatter: f, auto_fill: false } });
 const select = (...names) => ({ type: T.SELECT, property: { options: names.map(name => ({ name })) } });
 const formula = (expr, formatter) => ({ type: T.FORMULA, property: { formula_expression: expr, ...(formatter ? { formatter } : {}) } });
-const link = to => ({ type: T.LINK, property: { table_id: '@' + to, multiple: false } }); // '@14.1' → thay bằng table_id thật lúc chạy
+// multiple: true → 1 dòng chọn được NHIỀU Page (đăng 1 bài lên nhiều Fanpage cùng lúc).
+// '@14.1' là chỗ giữ tạm, lúc chạy sẽ thay bằng table_id thật của bảng 14.1.
+const link = to => ({ type: T.LINK, property: { table_id: '@' + to, multiple: true } });
 
 // Thứ tự khai báo = thứ tự tạo cột. Công thức phải đứng SAU cột mà nó tham chiếu.
 const SPECS = [

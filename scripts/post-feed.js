@@ -12,7 +12,10 @@
  *   + (Lịch đăng bài trống hoặc đã tới giờ).
  * Đặt RECORD_ID = đăng ĐÚNG dòng đó NGAY (bỏ qua kiểm tra lịch) — dùng cho nút bấm trong Lark Base.
  *
- * Token Facebook lấy TỪ bảng 14.1 theo từng Page, nên đăng được nhiều Page khác nhau.
+ * ĐĂNG 1 BÀI LÊN NHIỀU PAGE: cột Page chọn bao nhiêu Page thì đăng lên bấy nhiêu, mỗi Page dùng
+ * token riêng lấy từ bảng 14.1. Media chỉ tải về 1 lần rồi dùng lại cho mọi Page.
+ * Page nào đã đăng xong được đánh dấu "✔ <pageId>" trong Log; chạy lại thì bỏ qua Page đó,
+ * chỉ đăng nốt Page còn thiếu → đăng hỏng nửa chừng vẫn chạy lại an toàn, không đăng trùng.
  */
 const fs = require('fs'), os = require('os'), path = require('path');
 const L = require('./lib/lark');
@@ -176,71 +179,104 @@ const postComment = (token, objectId, message) =>
     const id = r.record_id, f = r.fields;
     if (L.plain(f['Trạng thái']) === DONE) { skip++; continue; }
 
-    // Page: ưu tiên ô liên kết, không có thì khớp theo chữ (ID hoặc tên Page).
+    // MỘT DÒNG CÓ THỂ CHỌN NHIỀU PAGE → đăng lần lượt lên từng Page.
+    // Ô liên kết nhiều: lấy hết record_ids. Ô chữ: tách theo dấu phẩy / xuống dòng.
     const cell = f[pageField];
-    const recId = linkIds(cell)[0];
-    const pg = recId ? byRec.get(recId) : byKey.get(L.plain(cell).trim().toLowerCase());
+    const recIds = linkIds(cell);
+    const targets = recIds.length
+      ? recIds.map(rid => byRec.get(rid)).filter(Boolean)
+      : L.plain(cell).split(/[,;\n]/).map(s => byKey.get(s.trim().toLowerCase())).filter(Boolean);
 
     const atts = Array.isArray(f['Ảnh/video']) ? f['Ảnh/video'] : [];
-    if (!pg || atts.length === 0) { skip++; continue; }
-    if (!pg.fbId || !pg.token) {
-      L.log(`  ✖ ${id}: Page "${pg.name || '?'}" thiếu ID/access_token ở bảng 14.1`);
-      if (!DRY) await L.updateRecord(tk, table, id, L.buildFields(meta, { 'Trạng thái': FAIL, 'Log': `${now()} - Page thiếu ID/token` }));
-      err++; continue;
-    }
+    if (!targets.length || atts.length === 0) { skip++; continue; }
+
     // Bấm nút đăng 1 dòng = đăng ngay, không xét lịch.
     if (RESPECT_SCHEDULE && !RECORD_ID) {
       const s = scheduleMs(f['Lịch đăng bài']);
       if (s && s > nowMs) { L.log(`  ⏳ ${id}: hẹn ${new Date(s).toISOString().slice(0, 16)}`); wait++; continue; }
     }
 
+    // Page nào ĐÃ đăng thành công ở lần chạy trước thì bỏ qua — Log giữ dấu "✔ <pageId>".
+    // Nhờ vậy dòng đăng hỏng nửa chừng, chạy lại chỉ đăng nốt Page còn thiếu, không đăng trùng.
+    const oldLog = L.plain(f['Log']);
+    const alreadyDone = new Set([...oldLog.matchAll(/✔ (\d+)/g)].map(m => m[1]));
+
     const caption = L.plain(f['Nội dung']);
+    const cmt = L.plain(f['Comment ebook']).trim();
     const loai = L.plain(f['Loại']);
     const kind = /video|reel/i.test(loai) ? 'reel'
       : /ảnh|hình|image|photo/i.test(loai) ? 'image'
         : (atts.some(isVid) ? 'reel' : 'image');
     const files = kind === 'reel' ? [atts.find(isVid) || atts[0]] : atts.filter(a => isImg(a) || !isVid(a));
 
-    L.log(`  >> ${id} | ${pg.name} | ${kind} | ${files.length} file | "${caption.slice(0, 40).replace(/\n/g, ' ')}"`);
-    if (DRY) continue;
+    L.log(`  >> ${id} | ${targets.length} Page (${targets.map(p => p.name).join(', ')}) | ${kind} | ${files.length} file | "${caption.slice(0, 40).replace(/\n/g, ' ')}"`);
+    if (DRY) { targets.forEach(p => L.log(`     [DRY] sẽ đăng lên ${p.name}${alreadyDone.has(p.fbId) ? ' (đã đăng rồi — bỏ qua)' : ''}`)); continue; }
 
     const tmp = [];
+    const lines = [];        // dòng log của lần chạy này
+    let okPages = 0, failPages = 0, firstLink = '';
+
     try {
+      // Tải media MỘT LẦN rồi dùng lại cho mọi Page.
       for (let i = 0; i < files.length; i++) {
         const p = path.join(os.tmpdir(), `fb_${id}_${i}_${(files[i].name || 'media').replace(/[^\w.]/g, '')}`);
         await L.downloadMedia(tk, files[i].file_token, p, table);
         files[i].path = p; tmp.push(p);
       }
-      const res = kind === 'reel'
-        ? await postReel(pg.fbId, pg.token, files[0], caption)
-        : await postPhotos(pg.fbId, pg.token, files, caption);
 
-      // Comment tự động (thả link ebook) — lỗi comment không được làm hỏng bài đã đăng.
-      let note = '';
-      const cmt = L.plain(f['Comment ebook']).trim();
-      if (cmt) {
-        try { await postComment(pg.token, res.objectId, cmt); note = ' +comment'; }
-        catch (e) { note = ' (comment lỗi)'; L.log(`     ! comment lỗi: ${String(e.message || e).slice(0, 100)}`); }
+      for (const pg of targets) {
+        if (alreadyDone.has(pg.fbId)) { L.log(`     = ${pg.name}: đã đăng lần trước, bỏ qua`); okPages++; continue; }
+        if (!pg.fbId || !pg.token) {
+          L.log(`     ✖ ${pg.name}: thiếu ID/access_token ở bảng 14.1`);
+          lines.push(`✖ ${pg.name}: thiếu ID/token`); failPages++; continue;
+        }
+        try {
+          const res = kind === 'reel'
+            ? await postReel(pg.fbId, pg.token, files[0], caption)
+            : await postPhotos(pg.fbId, pg.token, files, caption);
+
+          // Comment tự động — lỗi comment không được làm hỏng bài đã đăng.
+          let note = '';
+          if (cmt) {
+            try { await postComment(pg.token, res.objectId, cmt); note = ' +cmt'; }
+            catch (e) { note = ' (cmt lỗi)'; L.log(`     ! comment lỗi ở ${pg.name}: ${String(e.message || e).slice(0, 80)}`); }
+          }
+          if (!firstLink) firstLink = res.permalink;
+          lines.push(`✔ ${pg.fbId} ${pg.name}: ${res.permalink}${note}`);
+          L.log(`     ✔ ${pg.name}: ${res.permalink}`);
+          okPages++;
+        } catch (e) {
+          const msg = String(e.message || e).slice(0, 160);
+          lines.push(`✖ ${pg.name}: ${msg}`);
+          L.log(`     ✖ ${pg.name}: ${msg}`);
+          failPages++;
+        }
       }
-      await L.updateRecord(tk, table, id, {
-        ...L.buildFields(meta, { 'Trạng thái': DONE, 'Link bài đăng': res.permalink, 'Log': `${now()} - OK - ${res.objectId}${note}` }),
-        ...(meta.has('Đăng') ? { 'Đăng': null } : {}),   // hạ cờ để automation không bắn lại dòng này
-      });
-      L.log(`     ✔ ĐÃ ĐĂNG: ${res.permalink}`);
-      ok++;
     } catch (e) {
-      const msg = String(e.message || e).slice(0, 300);
+      // Lỗi trước khi đăng được Page nào (thường là tải media hỏng).
+      const msg = String(e.message || e).slice(0, 250);
+      lines.push(`✖ ${msg}`);
       L.log(`     ✖ LỖI: ${msg}`);
-      try {
-        await L.updateRecord(tk, table, id, {
-          ...L.buildFields(meta, { 'Trạng thái': FAIL, 'Log': `${now()} - LỖI - ${msg}` }),
-          ...(meta.has('Đăng') ? { 'Đăng': null } : {}),
-        });
-      } catch { /* ghi log lỗi thất bại thì thôi, đã in ra console */ }
-      err++;
+      failPages++;
     } finally {
       tmp.forEach(p => { try { fs.unlinkSync(p); } catch { } });
     }
+
+    // Chỉ "Thành công" khi MỌI Page đều xong — còn Page nào hỏng thì để Thất bại
+    // để chạy lại đăng nốt (Page đã xong sẽ tự bị bỏ qua nhờ dấu ✔ trong Log).
+    const all = failPages === 0 && okPages === targets.length;
+    const log = `${now()} - ${okPages}/${targets.length} Page\n` + lines.join('\n');
+    await L.updateRecord(tk, table, id, {
+      ...L.buildFields(meta, {
+        'Trạng thái': all ? DONE : FAIL,
+        'Log': (oldLog ? oldLog + '\n---\n' : '') + log,
+        'Link bài đăng': firstLink || undefined,
+      }),
+      // Hạ cờ "Đăng ngay" để automation không bắn lại. Chỉ làm khi "Đăng" là cột CHỌN —
+      // nếu là nút bấm (Button, type 3001) thì đó là cột chỉ đọc, ghi vào sẽ lỗi cả lô.
+      ...(meta.get('Đăng') && meta.get('Đăng').type === 3 ? { 'Đăng': null } : {}),
+    });
+    if (all) ok++; else err++;
   }
-  L.log(`Xong. Đăng ${ok}, lỗi ${err}, chờ giờ ${wait}, bỏ qua ${skip}.`);
+  L.log(`Xong. Dòng đăng đủ: ${ok}, dòng có lỗi: ${err}, chờ giờ: ${wait}, bỏ qua: ${skip}.`);
 })().catch(e => { console.error('\n✖ ' + (e.message || e)); process.exit(1); });

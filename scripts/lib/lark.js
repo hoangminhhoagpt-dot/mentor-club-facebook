@@ -18,7 +18,8 @@ const BASE_ID = process.env.LARK_BASE_ID || process.env.LARK_APP_TOKEN || '';
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
 // Kiểu cột Lark chỉ đọc — không bao giờ ghi vào (ghi sẽ lỗi cả lô).
-const READONLY = new Set([19, 20, 23, 1001, 1002, 1003, 1004, 1005]);
+// 3001 = Button (nút bấm). Tạo tay trong UI được, nhưng API ghi vào là lỗi.
+const READONLY = new Set([19, 20, 23, 3001, 1001, 1002, 1003, 1004, 1005]);
 
 /** Đọc giá trị cell về dạng chuỗi thuần, bất kể Lark trả kiểu gì. */
 const plain = v => {
