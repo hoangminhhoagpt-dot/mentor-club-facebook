@@ -1,0 +1,73 @@
+# ============================================================================
+# itto.yaml — HỢP ĐỒNG ITTO của gói mentor-club-facebook (Facebook ⇄ Lark Base)
+# Kéo Pages/Posts/Ads về Lark + đăng bài/Reel từ Lark lên Facebook. Script ở scripts/*.js.
+# ZERO-DEPENDENCY: soát bằng `node check-itto.mjs` (không cần npm install).
+# ============================================================================
+
+package: mentor-club-facebook
+version: 1.0.0
+skills:
+  - hmh-AIOS-facebook-lark     # kéo số liệu Page/Post/Ads
+  - dang-reel-facebook         # đăng bài/Reel lên Facebook
+
+# ── I — INPUT ──
+input:
+  base_mau:
+    template_url: "https://<link-nhan-ban-Base-Facebook>"   # <đổi khi bàn giao>
+    setup: node scripts/init-tables.js
+    tables:
+      - "Pages        → Variable TABLE_PAGES"
+      - "Posts (14.2) → Variable TABLE_POSTS"
+      - "Đăng bài/Reel (14.3) → Variable TABLE_DANGBAI"
+      - "Ads Account  → Variable TABLE_ADS_ACCOUNT"
+      - "Ads Daily    → Variable TABLE_ADS_DAILY"
+  secrets:
+    - LARK_APP_SECRET
+    - FB_USER_TOKEN
+  variables:
+    - LARK_APP_ID
+    - LARK_DOMAIN
+    - LARK_BASE_ID
+    - TABLE_PAGES
+    - TABLE_POSTS
+    - TABLE_DANGBAI
+    - TABLE_ADS_ACCOUNT
+    - TABLE_ADS_DAILY
+    - AD_ACCOUNT_ID
+  phieu_input: 00-PHIEU-INPUT.md
+  preflight: node check-itto.mjs
+
+# ── T — TECH ──
+tech:
+  - Lark Base
+  - Facebook Graph API (Pages · Posts · Ad Accounts · Ads Insights)
+  - GitHub Actions
+  - "Node >= 18"
+
+# ── T — TOOL ──
+tool:
+  setup: node scripts/init-tables.js     # event_type init-tables (tạo 5 bảng)
+  triggers:
+    - event_type: fetch-pages
+      script: node scripts/fetch-pages.js
+      desc: "Kéo danh sách Page → TABLE_PAGES"
+    - event_type: fetch-posts
+      script: node scripts/fetch-posts.js
+      desc: "Kéo bài viết + tương tác → TABLE_POSTS (14.2)"
+    - event_type: fetch-adaccounts
+      script: node scripts/fetch-adaccounts.js
+      desc: "Kéo tài khoản quảng cáo → TABLE_ADS_ACCOUNT"
+    - event_type: fetch-ads-insights
+      script: node scripts/fetch-ads-insights.js
+      desc: "Kéo số liệu quảng cáo theo ngày → TABLE_ADS_DAILY"
+    - event_type: dang-bai
+      script: node scripts/post-feed.js
+      desc: "Đăng bài/Reel từ 14.3 lên Facebook theo record_id (nút) / lịch"
+
+# ── O — OUTPUT ──
+output:
+  writes_back:
+    - "TABLE_PAGES / POSTS / ADS_ACCOUNT / ADS_DAILY: upsert số liệu"
+    - "TABLE_DANGBAI (14.3): id bài đăng + trạng thái, theo record_id"
+  proof: "tab Actions xanh + các bảng có dữ liệu + bài lên Page"
+  multi_tenant: "1 repo phục vụ nhiều base: truyền base_id/table_* qua client_payload."
