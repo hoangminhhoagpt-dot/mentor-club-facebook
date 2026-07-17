@@ -37,14 +37,6 @@ Chạy lại bao nhiêu lần cũng được — **không tạo bảng trùng, k
 
 Muốn chạy trên đám mây (Lark bấm nút là đăng, không cần bật máy) thì đọc [TRIEN-KHAI.md](TRIEN-KHAI.md).
 
-## Khởi tạo nhanh nhất
-
-Điền 4 giá trị vào đầu file rồi chạy — nó làm hết 5 bước (tạo bảng → Page → ads → số liệu ngày → bài viết):
-
-\✖ Chưa điền LARK_APP_ID ở đầu file khoi-tao.sh
-Bốn giá trị: , , , .
-Chạy lại bao nhiêu lần cũng được — không tạo bảng trùng, không tạo dòng trùng.
-
 ## Bắt đầu
 
 | Bạn muốn | Đọc file |
