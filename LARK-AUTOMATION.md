@@ -46,7 +46,7 @@ Engine hiểu cả hai, không phải sửa gì.
 **Cách dùng hằng ngày:**
 1. Thêm 1 dòng ở bảng 14.3: chọn **Page** (chọn **bao nhiêu Page cũng được** — bài sẽ đăng lên tất cả), chọn **Loại**, gõ **Nội dung**, kéo file vào **Ảnh/video**.
 2. Bấm nút **`Đăng`** (hoặc đổi cột `Đăng` → `Đăng ngay`).
-3. Khoảng 30–60 giây sau, dòng đó tự có **Trạng thái = Thành công** và **Link bài đăng**. Cột **`Log`** liệt kê link của **từng Page**.
+3. Khoảng 30–60 giây sau, dòng đó tự có **Trạng thái = Thành công**, và cột **`Link bài đăng`** liệt kê link của **tất cả Page** đã đăng (mỗi Page một dòng `Tên Page: link`). Cột **`Log`** ghi chi tiết từng bước.
 
 Nếu **Trạng thái = Thất bại**, đọc cột **`Log`** — nó chỉ rõ Page nào hỏng vì sao. **Cứ bấm đăng lại**: Page đã đăng xong sẽ bị bỏ qua, chỉ đăng nốt Page còn thiếu, không bao giờ đăng trùng.
 

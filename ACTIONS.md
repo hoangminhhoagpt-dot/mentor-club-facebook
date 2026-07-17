@@ -123,8 +123,16 @@ Kết quả ghi vào `Log`, mỗi Page một dòng:
 ```
 
 - `Trạng thái = Thành công` **chỉ khi MỌI Page đều đăng xong**. Còn Page nào hỏng → `Thất bại`, và `Log` chỉ rõ Page nào hỏng vì sao.
-- `Link bài đăng` giữ link của Page **đầu tiên**; link đầy đủ của từng Page nằm trong `Log`.
-- **Chống đăng trùng theo từng Page:** Page đã đăng xong được đánh dấu `✔ <pageId>` trong `Log`. Chạy lại thì Page đó **bị bỏ qua**, chỉ đăng nốt Page còn thiếu. Nên nếu đăng 5 Page mà hỏng 2, cứ bấm lại — nó chỉ đăng 2 Page hỏng, không đăng lại 3 Page kia.
+- `Link bài đăng` gộp link của **TẤT CẢ Page vào một cột**, mỗi Page một dòng `Tên Page: link` — nhìn một ô là thấy hết, khỏi mở `Log`:
+
+  ```
+  CLLC: https://www.facebook.com/170332499501394_122256833396128618
+  John CVTI: https://www.facebook.com/446883538502198_122206719470507172
+  ```
+
+  Muốn vậy cột này phải là kiểu **Văn bản** (bảng mẫu mới đã đúng). Base cũ để kiểu **URL** thì chỉ chứa được 1 link → engine ghi link Page đầu kèm chú thích `+N Page (xem Log)`. Đổi cột sang Văn bản là có đủ link ngay, không phải sửa code.
+- **Chọn Page mà tra không ra ở 14.1** (Page mới, chưa `fetch-pages`) → dòng báo `Thất bại` và `Log` ghi rõ Page nào, **không lặng lẽ bỏ qua**. Trước đây Page kiểu này bị bỏ đi âm thầm mà dòng vẫn `Thành công`.
+- **Chống đăng trùng theo từng Page:** Page đã đăng xong được đánh dấu `✔ <pageId>` trong `Log`. Chạy lại thì Page đó **bị bỏ qua**, chỉ đăng nốt Page còn thiếu. Nên nếu đăng 5 Page mà hỏng 2, cứ bấm lại — nó chỉ đăng 2 Page hỏng, không đăng lại 3 Page kia. Link của các Page đã xong vẫn được giữ nguyên trong `Link bài đăng`.
 
 > Cột Page ở bảng cũ nếu là **cột chữ**: gõ tên Page (hoặc ID Page) cách nhau bằng **dấu phẩy** — engine vẫn hiểu là nhiều Page.
 

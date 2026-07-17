@@ -76,7 +76,9 @@ const SPECS = [
       'Đăng': select('Đăng ngay'),
       'Trạng thái': select('Thành công', 'Thất bại'),
       'Log': { type: T.TEXT },
-      'Link bài đăng': { type: T.URL },
+      // Chữ chứ KHÔNG phải URL: 1 dòng đăng lên nhiều Page thì có nhiều link, mà cột URL
+      // chỉ ôm được đúng 1 link. Cột chữ chứa mọi link trong MỘT cột, mỗi Page 1 dòng.
+      'Link bài đăng': { type: T.TEXT },
       // Automation của Lark cần gửi record_id sang GitHub. Có sẵn cột này thì luôn chọn được
       // trong trình chọn biến, khỏi phụ thuộc vào việc Lark có lộ "Record ID" hay không.
       'Record ID': formula('RECORD_ID()'),
@@ -133,6 +135,11 @@ const SPECS = [
   },
 ];
 
+// Lời nhắc cho cột sai kiểu ở Base cũ — nói rõ mất gì để admin tự quyết có sửa tay hay không.
+const TYPE_NOTE = {
+  '14.3/Link bài đăng': 'kiểu URL chỉ giữ được 1 link. Đổi tay sang Văn bản để thấy link của MỌI Page (Log vẫn có đủ).',
+};
+
 const BASE = process.env.LARK_BASE_ID || process.env.LARK_APP_TOKEN || '';
 
 (async () => {
@@ -181,6 +188,14 @@ const BASE = process.env.LARK_BASE_ID || process.env.LARK_APP_TOKEN || '';
     // ---- Bảng đã có: chỉ bổ sung cột còn THIẾU TÊN, không sửa cột đang có ----
     resolved[spec.key] = hit.table_id;
     const meta = await L.getFields(tk, hit.table_id, BASE);
+
+    // Cột có sẵn nhưng SAI KIỂU so với mẫu: chỉ báo, KHÔNG tự đổi (đổi kiểu có thể mất dữ liệu
+    // của khách đang dùng). Engine vẫn chạy được vì buildFields ghi theo kiểu cột thật.
+    for (const [name, f] of Object.entries(spec.fields)) {
+      const cur = meta.get(name);
+      if (cur && f.type !== cur.type) L.log(`  ! cột "${name}" đang là kiểu ${cur.type}, mẫu mới là ${f.type}${TYPE_NOTE[`${spec.key}/${name}`] ? ' — ' + TYPE_NOTE[`${spec.key}/${name}`] : ''}`);
+    }
+
     const missing = Object.entries(spec.fields).filter(([name]) => !meta.has(name));
     if (!missing.length) { L.log(`= Bảng "${hit.name}" đã đủ cột — giữ nguyên.`); continue; }
     L.log(`~ Bảng "${hit.name}" thiếu ${missing.length} cột: ${missing.map(([n]) => n).join(', ')}`);

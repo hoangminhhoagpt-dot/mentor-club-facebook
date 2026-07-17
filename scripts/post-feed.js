@@ -16,6 +16,7 @@
  * token riêng lấy từ bảng 14.1. Media chỉ tải về 1 lần rồi dùng lại cho mọi Page.
  * Page nào đã đăng xong được đánh dấu "✔ <pageId>" trong Log; chạy lại thì bỏ qua Page đó,
  * chỉ đăng nốt Page còn thiếu → đăng hỏng nửa chừng vẫn chạy lại an toàn, không đăng trùng.
+ * Cột "Link bài đăng" gộp link của MỌI Page vào một chỗ, mỗi Page một dòng "Tên Page: link".
  */
 const fs = require('fs'), os = require('os'), path = require('path');
 const L = require('./lib/lark');
@@ -181,14 +182,21 @@ const postComment = (token, objectId, message) =>
 
     // MỘT DÒNG CÓ THỂ CHỌN NHIỀU PAGE → đăng lần lượt lên từng Page.
     // Ô liên kết nhiều: lấy hết record_ids. Ô chữ: tách theo dấu phẩy / xuống dòng.
+    // Page chọn rồi mà tra KHÔNG ra ở 14.1 thì gom vào "unknown" để báo lỗi — tuyệt đối không
+    // lặng lẽ bỏ đi: bỏ đi thì dòng vẫn báo "Thành công" trong khi khách tưởng đã đăng đủ Page.
     const cell = f[pageField];
     const recIds = linkIds(cell);
-    const targets = recIds.length
-      ? recIds.map(rid => byRec.get(rid)).filter(Boolean)
-      : L.plain(cell).split(/[,;\n]/).map(s => byKey.get(s.trim().toLowerCase())).filter(Boolean);
+    const targets = [], unknown = [];
+    const keys = recIds.length ? recIds : L.plain(cell).split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+    for (const k of keys) {
+      const pg = recIds.length ? byRec.get(k) : byKey.get(k.toLowerCase());
+      if (!pg) unknown.push(k);
+      else if (!targets.some(t => t.fbId === pg.fbId)) targets.push(pg);   // chọn trùng Page thì chỉ đăng 1 lần
+    }
 
     const atts = Array.isArray(f['Ảnh/video']) ? f['Ảnh/video'] : [];
-    if (!targets.length || atts.length === 0) { skip++; continue; }
+    // Chưa chọn Page hoặc chưa đính file = dòng soạn dở → im lặng bỏ qua (không phải lỗi).
+    if (atts.length === 0 || (!targets.length && !unknown.length)) { skip++; continue; }
 
     // Bấm nút đăng 1 dòng = đăng ngay, không xét lịch.
     if (RESPECT_SCHEDULE && !RECORD_ID) {
@@ -196,10 +204,14 @@ const postComment = (token, objectId, message) =>
       if (s && s > nowMs) { L.log(`  ⏳ ${id}: hẹn ${new Date(s).toISOString().slice(0, 16)}`); wait++; continue; }
     }
 
-    // Page nào ĐÃ đăng thành công ở lần chạy trước thì bỏ qua — Log giữ dấu "✔ <pageId>".
+    // Page nào ĐÃ đăng thành công ở lần chạy trước thì bỏ qua — Log giữ dấu "✔ <pageId> <tên>: <link>".
     // Nhờ vậy dòng đăng hỏng nửa chừng, chạy lại chỉ đăng nốt Page còn thiếu, không đăng trùng.
+    // Đọc luôn LINK cũ ra: Page bị bỏ qua lần này vẫn phải có mặt ở cột "Link bài đăng",
+    // nếu không thì chạy lại sẽ ghi đè cột đó bằng mỗi link của Page vừa đăng nốt.
     const oldLog = L.plain(f['Log']);
     const alreadyDone = new Set([...oldLog.matchAll(/✔ (\d+)/g)].map(m => m[1]));
+    const oldLinks = new Map();
+    for (const m of oldLog.matchAll(/✔ (\d+) (.+?): (https?:\/\/\S+)/g)) oldLinks.set(m[1], { name: m[2].trim(), url: m[3] });
 
     const caption = L.plain(f['Nội dung']);
     const cmt = L.plain(f['Comment ebook']).trim();
@@ -209,23 +221,40 @@ const postComment = (token, objectId, message) =>
         : (atts.some(isVid) ? 'reel' : 'image');
     const files = kind === 'reel' ? [atts.find(isVid) || atts[0]] : atts.filter(a => isImg(a) || !isVid(a));
 
-    L.log(`  >> ${id} | ${targets.length} Page (${targets.map(p => p.name).join(', ')}) | ${kind} | ${files.length} file | "${caption.slice(0, 40).replace(/\n/g, ' ')}"`);
-    if (DRY) { targets.forEach(p => L.log(`     [DRY] sẽ đăng lên ${p.name}${alreadyDone.has(p.fbId) ? ' (đã đăng rồi — bỏ qua)' : ''}`)); continue; }
+    L.log(`  >> ${id} | ${targets.length} Page (${targets.map(p => p.name).join(', ')})${unknown.length ? ` | ✖ ${unknown.length} Page không tra được` : ''} | ${kind} | ${files.length} file | "${caption.slice(0, 40).replace(/\n/g, ' ')}"`);
+    if (DRY) {
+      targets.forEach(p => L.log(`     [DRY] sẽ đăng lên ${p.name}${alreadyDone.has(p.fbId) ? ' (đã đăng rồi — bỏ qua)' : ''}`));
+      unknown.forEach(u => L.log(`     [DRY] ✖ ${u}: không thấy ở bảng 14.1 → chạy fetch-pages`));
+      continue;
+    }
 
     const tmp = [];
     const lines = [];        // dòng log của lần chạy này
-    let okPages = 0, failPages = 0, firstLink = '';
+    const links = new Map(); // fbId → {name, url}: link của MỌI Page, gộp cả lần chạy trước
+    let okPages = 0, failPages = 0;
+
+    // Page tra không ra tính là LỖI của dòng → dòng không thể "Thành công" khi còn thiếu Page.
+    for (const u of unknown) {
+      lines.push(`✖ ${u}: không thấy ở bảng 14.1 → chạy action fetch-pages rồi đăng lại`);
+      L.log(`     ✖ ${u}: không có trong bảng 14.1`);
+      failPages++;
+    }
 
     try {
       // Tải media MỘT LẦN rồi dùng lại cho mọi Page.
-      for (let i = 0; i < files.length; i++) {
+      for (let i = 0; i < files.length && targets.length; i++) {
         const p = path.join(os.tmpdir(), `fb_${id}_${i}_${(files[i].name || 'media').replace(/[^\w.]/g, '')}`);
         await L.downloadMedia(tk, files[i].file_token, p, table);
         files[i].path = p; tmp.push(p);
       }
 
       for (const pg of targets) {
-        if (alreadyDone.has(pg.fbId)) { L.log(`     = ${pg.name}: đã đăng lần trước, bỏ qua`); okPages++; continue; }
+        if (alreadyDone.has(pg.fbId)) {
+          const prev = oldLinks.get(pg.fbId);
+          if (prev) links.set(pg.fbId, { name: pg.name || prev.name, url: prev.url });
+          L.log(`     = ${pg.name}: đã đăng lần trước, bỏ qua`);
+          okPages++; continue;
+        }
         if (!pg.fbId || !pg.token) {
           L.log(`     ✖ ${pg.name}: thiếu ID/access_token ở bảng 14.1`);
           lines.push(`✖ ${pg.name}: thiếu ID/token`); failPages++; continue;
@@ -241,7 +270,7 @@ const postComment = (token, objectId, message) =>
             try { await postComment(pg.token, res.objectId, cmt); note = ' +cmt'; }
             catch (e) { note = ' (cmt lỗi)'; L.log(`     ! comment lỗi ở ${pg.name}: ${String(e.message || e).slice(0, 80)}`); }
           }
-          if (!firstLink) firstLink = res.permalink;
+          links.set(pg.fbId, { name: pg.name, url: res.permalink });
           lines.push(`✔ ${pg.fbId} ${pg.name}: ${res.permalink}${note}`);
           L.log(`     ✔ ${pg.name}: ${res.permalink}`);
           okPages++;
@@ -264,13 +293,24 @@ const postComment = (token, objectId, message) =>
 
     // Chỉ "Thành công" khi MỌI Page đều xong — còn Page nào hỏng thì để Thất bại
     // để chạy lại đăng nốt (Page đã xong sẽ tự bị bỏ qua nhờ dấu ✔ trong Log).
-    const all = failPages === 0 && okPages === targets.length;
-    const log = `${now()} - ${okPages}/${targets.length} Page\n` + lines.join('\n');
+    const total = targets.length + unknown.length;
+    const all = failPages === 0 && okPages === total;
+    const log = `${now()} - ${okPages}/${total} Page\n` + lines.join('\n');
+
+    // MỘT cột "Link bài đăng" chứa link của TẤT CẢ Page — mỗi Page 1 dòng "Tên Page: link".
+    // Base cũ để cột này kiểu URL thì chỉ nhét được 1 link → ghi link đầu, và nói rõ còn bao nhiêu
+    // Page nữa để không ai tưởng là chỉ đăng được 1 Page (link đủ vẫn nằm ở Log).
+    const list = [...links.values()];
+    const linkValue = !list.length ? undefined
+      : meta.get('Link bài đăng')?.type === 15
+        ? { link: list[0].url, text: list.length > 1 ? `${list[0].name} +${list.length - 1} Page (xem Log)` : list[0].name }
+        : list.map(x => `${x.name}: ${x.url}`).join('\n');
+
     await L.updateRecord(tk, table, id, {
       ...L.buildFields(meta, {
         'Trạng thái': all ? DONE : FAIL,
         'Log': (oldLog ? oldLog + '\n---\n' : '') + log,
-        'Link bài đăng': firstLink || undefined,
+        'Link bài đăng': linkValue,
       }),
       // Hạ cờ "Đăng ngay" để automation không bắn lại. Chỉ làm khi "Đăng" là cột CHỌN —
       // nếu là nút bấm (Button, type 3001) thì đó là cột chỉ đọc, ghi vào sẽ lỗi cả lô.
