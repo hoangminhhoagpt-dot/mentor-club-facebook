@@ -83,10 +83,11 @@ const SPECS = [
     fields: {
       'STT': { type: T.TEXT },
       'Page': link('14.1'),
-      'Loại': select('Hình ảnh', 'Video'),
+      'Loại': select('Hình ảnh', 'Video', 'Video có bìa'),
       'Nội dung': { type: T.TEXT },
       'Comment ebook': { type: T.TEXT },
       'Ảnh/video': { type: T.FILE },
+      'Ảnh bìa': { type: T.FILE },   // ảnh bìa của video; bỏ trống thì Facebook tự chọn khung hình
       'Lịch đăng bài': date(),
       'Đăng': select('Đăng ngay'),
       'Trạng thái': select('Thành công', 'Thất bại'),
