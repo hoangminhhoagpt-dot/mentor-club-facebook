@@ -9,7 +9,7 @@ Mỗi việc là một **action gọi bằng HTTP**, nên Lark Base bấm nút l
 | 0 | `init-tables` | Tạo sẵn 5 bảng mẫu vào Base của bạn | tất cả |
 | 1 | `fetch-pages` | Lấy danh sách Fanpage + token riêng từng Page | 14.1 |
 | 2 | `fetch-posts` | Lấy bài đã đăng + lượt tương tác theo từng cảm xúc | 14.2 |
-| 3 | `dang-bai` | Đăng bài ảnh / Reel lên Facebook | 14.3 |
+| 3 | `dang-bai` | Đăng bài ảnh / Reel / video có ảnh bìa lên Facebook | 14.3 |
 | 4 | `fetch-adaccounts` | Lấy tài khoản quảng cáo + tổng chi tiêu | 14.4 |
 | 5 | `fetch-ads-insights` | Lấy số liệu quảng cáo theo từng ngày | 14.5 |
 
@@ -44,6 +44,22 @@ Muốn chạy trên đám mây (Lark bấm nút là đăng, không cần bật m
 | Triển khai cho mình / cho khách (dưới 20 phút) | **[TRIEN-KHAI.md](TRIEN-KHAI.md)** |
 | Xem chi tiết từng action + tham số | [ACTIONS.md](ACTIONS.md) |
 | Cấu hình nút bấm & tự động hoá trong Lark Base | [LARK-AUTOMATION.md](LARK-AUTOMATION.md) |
+
+## Cột đã thêm về sau (Base dựng trước ngày này phải thêm tay)
+
+`init-tables` tạo sẵn đủ cột cho Base mới. Base dựng **trước** mốc dưới đây thì mở bảng, thêm tay đúng tên cột —
+engine tự dò, thiếu cột thì bỏ qua chứ không lỗi.
+
+| Ngày | Bảng | Cột / lựa chọn cần thêm | Kiểu | Để làm gì |
+|---|---|---|---|---|
+| 08/09/2026 | `14.3 Đăng bài tự động` | **`Ảnh bìa`** | Tệp đính kèm | Ảnh bìa (thumbnail) của video |
+| 08/09/2026 | `14.3 Đăng bài tự động` | thêm lựa chọn **`Video có bìa`** vào cột `Loại` | Lựa chọn đơn | Chọn kiểu này thì đăng **video lên tường kèm bìa** thay vì Reel |
+
+Chạy lại action `init-tables` sẽ **tự thêm cột `Ảnh bìa`** (nó chỉ thêm cột còn thiếu, không đụng dữ liệu và cột sẵn có).
+Nhưng **lựa chọn `Video có bìa` thì phải thêm tay** — `init-tables` không sửa cột đã tồn tại, mà `Loại` thì bảng nào cũng có rồi.
+Đặt tên lựa chọn khác cũng được, miễn trong tên có chữ *bìa* (hoặc *thumb* / *cover*) — engine dò theo chữ đó.
+
+Chi tiết cách dùng ảnh bìa (kích thước, vì sao Reel khác video thường) xem [ACTIONS.md](ACTIONS.md#ảnh-bìa-thumbnail-cho-video).
 
 ## Nguyên tắc thiết kế
 
