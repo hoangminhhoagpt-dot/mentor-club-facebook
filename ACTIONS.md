@@ -99,12 +99,25 @@ Ghi: Post-ID, Page (liên kết sang 14.1), Nội dung, Link post, Thumbnail (�
 
 **Cột `Loại` quyết định kiểu đăng:**
 
-| `Loại` | Hành vi |
-|---|---|
-| `Hình ảnh` | Đăng bài feed kèm ảnh (nhiều ảnh trong 1 bài được) |
-| `Video` | Đăng **REEL** — upload phân mảnh, video nặng vẫn lên được |
+| `Loại` | Hành vi | Ảnh bìa |
+|---|---|---|
+| `Hình ảnh` | Đăng bài feed kèm ảnh (nhiều ảnh trong 1 bài được) | — |
+| `Video` | Đăng **REEL** — upload phân mảnh, video nặng vẫn lên được | ⚠️ chỉ ép được sau khi đăng, Facebook hay tự lấy khung hình |
+| `Video có bìa` | Đăng **video thường lên tường** — cũng upload phân mảnh | ✅ chắc chắn, lấy từ cột `Ảnh bìa` |
 
 **Một dòng được đăng khi:** `Trạng thái` ≠ `Thành công` **và** chọn được Page **và** có file ở `Ảnh/video` **và** (`Lịch đăng bài` trống hoặc đã tới giờ).
+
+### Ảnh bìa (thumbnail) cho video
+
+Đính ảnh vào cột **`Ảnh bìa`** (kiểu Tệp đính kèm) của bảng 14.3. Chọn `Loại = Video có bìa` để chắc chắn ăn bìa.
+
+- Ảnh **≤ 10MB**, để đúng tỉ lệ video: dọc 9:16 → **1080×1920**, ngang 16:9 → **1280×720**. Sai tỉ lệ sẽ bị cắt.
+- Vì sao Reel khác: Facebook **không cho gắn bìa lúc đăng Reel**, chỉ có thể ép sau khi đăng
+  (`POST /{video-id}/thumbnails`) và nhiều chỗ vẫn hiển thị khung hình do Facebook tự chọn.
+  Cần bìa đúng như ý ⇒ dùng `Video có bìa`.
+- Bìa hỏng thì **bài vẫn tính là đăng thành công**, chỉ ghi chú vào `Log`. Cố tình làm vậy: nếu đánh dấu thất bại
+  thì lần chạy sau sẽ đăng lại lần thứ hai cùng một video.
+- Bỏ trống cột `Ảnh bìa` ⇒ chạy y như trước. Bảng chưa có cột `Ảnh bìa` cũng không sao — engine tự dò, không thấy thì bỏ qua.
 
 Đăng xong hệ thống ghi ngược lại dòng đó: `Trạng thái`, `Link bài đăng`, `Log`.
 
