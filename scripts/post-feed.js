@@ -2,8 +2,13 @@
 'use strict';
 /*
  * post-feed.js — Đăng bài từ bảng "14.3" lên Facebook Page.
- *   Loại = "Hình ảnh" → đăng bài feed kèm ảnh (nhiều ảnh được).
- *   Loại = "Video"    → đăng REEL (upload phân mảnh, không giới hạn dung lượng qua Anycross).
+ *   Loại = "Hình ảnh"     → đăng bài feed kèm ảnh (nhiều ảnh được).
+ *   Loại = "Video"        → đăng REEL (upload phân mảnh, không giới hạn dung lượng qua Anycross).
+ *   Loại = "Video có bìa" → đăng VIDEO LÊN FEED kèm ẢNH BÌA lấy từ cột "Ảnh bìa" (cũng upload phân mảnh).
+ *
+ * ẢNH BÌA: video feed gắn được bìa tự chọn ngay lúc đăng (tham số `thumb`) — chắc chắn.
+ * Reel thì pha finish không có tham số bìa, chỉ ép được sau khi đăng qua POST /{video-id}/thumbnails
+ * và Facebook không phải lúc nào cũng nhận. Bìa hỏng CHỈ ghi Log, bài vẫn tính đã đăng (tránh đăng lại lần hai).
  *
  *   node scripts/post-feed.js            đăng mọi dòng đủ điều kiện
  *   node scripts/post-feed.js --dry-run  liệt kê dòng sẽ đăng, không đăng thật
@@ -114,8 +119,84 @@ async function uploadResumable(uploadUrl, token, filePath) {
   } finally { fs.closeSync(fd); }
 }
 
+// Ảnh bìa: POST /{video-id}/thumbnails (is_preferred=true). Video vừa lên có thể chưa xử lý xong → thử lại vài lần.
+async function setThumbnail(token, videoId, thumbFile) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const fd = new FormData();
+      fd.set('access_token', token);
+      fd.set('is_preferred', 'true');
+      fd.set('source', new Blob([fs.readFileSync(thumbFile.path)]), thumbFile.name || 'thumb.jpg');
+      return await FB.call(`${FB.GRAPH}/${videoId}/thumbnails`, { method: 'POST', body: fd });
+    } catch (e) {
+      if (attempt >= 5) throw e;
+      await new Promise(r => setTimeout(r, 4000 * attempt));
+    }
+  }
+}
+
+// Video lên FEED (Loại = "Video có bìa"): 3 pha start → transfer → finish, KHÔNG dính trần dung lượng.
+// Khác Reel ở chỗ đăng feed cho phép gắn ảnh bìa tự chọn ngay lúc đăng (tham số `thumb`).
+async function postVideo(pageId, token, file, caption, thumbFile) {
+  const total = fs.statSync(file.path).size;
+  const start = await FB.call(`${FB.GRAPH}/${pageId}/videos`, {
+    method: 'POST',
+    body: new URLSearchParams({ upload_phase: 'start', file_size: String(total), access_token: token }),
+  });
+  if (!start.upload_session_id || !start.video_id) throw new Error('Video start thiếu upload_session_id/video_id');
+
+  let off = parseInt(start.start_offset || '0', 10), end = parseInt(start.end_offset || '0', 10);
+  const fd = fs.openSync(file.path, 'r');
+  try {
+    while (off < end) {
+      const len = end - off;
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, off);
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const form = new FormData();
+          form.set('access_token', token);
+          form.set('upload_phase', 'transfer');
+          form.set('upload_session_id', start.upload_session_id);
+          form.set('start_offset', String(off));
+          form.set('video_file_chunk', new Blob([buf]), file.name || 'video.mp4');
+          const j = await FB.call(`${FB.GRAPH}/${pageId}/videos`, { method: 'POST', body: form });
+          off = parseInt(j.start_offset || String(end), 10);
+          end = parseInt(j.end_offset || String(end), 10);
+          break;
+        } catch (e) {
+          if (attempt >= RETRY) throw new Error(`upload chunk @${off} hỏng sau ${attempt} lần: ${String(e.message || e).slice(0, 160)}`);
+          L.log(`     … chunk @${off} lỗi (lần ${attempt}), thử lại`);
+          await new Promise(r => setTimeout(r, 1500 * attempt));
+        }
+      }
+      L.log(`     ↑ ${Math.min(off, total)}/${total} bytes (${Math.round(off / total * 100)}%)`);
+    }
+  } finally { fs.closeSync(fd); }
+
+  const fin = new FormData();
+  fin.set('access_token', token);
+  fin.set('upload_phase', 'finish');
+  fin.set('upload_session_id', start.upload_session_id);
+  if (caption) fin.set('description', caption);
+  if (thumbFile) fin.set('thumb', new Blob([fs.readFileSync(thumbFile.path)]), thumbFile.name || 'thumb.jpg');
+  await FB.call(`${FB.GRAPH}/${pageId}/videos`, { method: 'POST', body: fin });
+
+  // Ép lại bìa cho chắc — lỗi bìa KHÔNG được làm hỏng bài đã đăng.
+  if (thumbFile) {
+    try { await setThumbnail(token, start.video_id, thumbFile); L.log('     ✔ đã đặt ảnh bìa'); }
+    catch (e) { L.log(`     ! đặt ảnh bìa lỗi (video vẫn đăng): ${String(e.message || e).slice(0, 120)}`); }
+  }
+
+  let permalink = '';
+  try { permalink = (await FB.get(start.video_id, { fields: 'permalink_url' }, token)).permalink_url || ''; } catch { }
+  if (permalink.startsWith('/')) permalink = 'https://www.facebook.com' + permalink;
+  return { objectId: start.video_id, permalink: permalink || `https://www.facebook.com/${start.video_id}` };
+}
+
 // Reel: 3 pha start → upload → finish. Video phải MP4 dọc 9:16, dài 3–90 giây.
-async function postReel(pageId, token, file, caption) {
+// Pha finish KHÔNG có tham số bìa → chỉ ép được sau khi đăng, và Facebook không phải lúc nào cũng nhận.
+async function postReel(pageId, token, file, caption, thumbFile) {
   const start = await FB.call(`${FB.GRAPH}/${pageId}/video_reels?upload_phase=start&access_token=${encodeURIComponent(token)}`, { method: 'POST' });
   if (!start.video_id || !start.upload_url) throw new Error('Reel start thiếu video_id/upload_url');
   await uploadResumable(start.upload_url, token, file.path);
@@ -133,6 +214,10 @@ async function postReel(pageId, token, file, caption) {
       if (phase === 'ready' || phase === 'PUBLISHED') break;
       if (phase === 'error') throw new Error('Facebook xử lý Reel lỗi: ' + JSON.stringify(st.status));
     } catch { /* đang xử lý, chờ tiếp */ }
+  }
+  if (thumbFile) {
+    try { await setThumbnail(token, start.video_id, thumbFile); L.log('     ✔ đã ép ảnh bìa cho Reel'); }
+    catch (e) { L.log(`     ! ép bìa Reel lỗi (Reel vẫn đăng): ${String(e.message || e).slice(0, 120)}`); }
   }
   if (permalink.startsWith('/')) permalink = 'https://www.facebook.com' + permalink;
   return { objectId: start.video_id, permalink: permalink || `https://www.facebook.com/${start.video_id}` };
@@ -166,6 +251,10 @@ const postComment = (token, objectId, message) =>
   const pageField = [...meta.entries()].find(([, f]) => f.type === 18 || f.type === 21)?.[0]
     || [...meta.keys()].find(n => /page/i.test(n));
   L.log(`Cột chọn Page = "${pageField}" (${meta.get(pageField)?.type === 18 || meta.get(pageField)?.type === 21 ? 'liên kết' : 'chữ'}).`);
+
+  // Cột ẢNH BÌA: đính kèm (type 17) có tên chứa bìa/thumb/cover. Bảng chưa có cột này thì bỏ qua, chạy như cũ.
+  const thumbField = [...meta.entries()].find(([n, fl]) => fl.type === 17 && /b[ìi]a|thumb|cover/i.test(n))?.[0] || '';
+  L.log(thumbField ? `Cột ảnh bìa = "${thumbField}".` : 'Bảng chưa có cột ảnh bìa → Facebook tự chọn khung hình.');
 
   let rows = await L.listRecords(tk, table);
   if (RECORD_ID) {
@@ -216,12 +305,20 @@ const postComment = (token, objectId, message) =>
     const caption = L.plain(f['Nội dung']);
     const cmt = L.plain(f['Comment ebook']).trim();
     const loai = L.plain(f['Loại']);
-    const kind = /video|reel/i.test(loai) ? 'reel'
-      : /ảnh|hình|image|photo/i.test(loai) ? 'image'
-        : (atts.some(isVid) ? 'reel' : 'image');
-    const files = kind === 'reel' ? [atts.find(isVid) || atts[0]] : atts.filter(a => isImg(a) || !isVid(a));
+    // "Video có bìa" cũng khớp /video/ nên phải xét "bìa" TRƯỚC.
+    const kind = /b[ìi]a|thumb|cover/i.test(loai) ? 'video'
+      : /video|reel/i.test(loai) ? 'reel'
+        : /ảnh|hình|image|photo/i.test(loai) ? 'image'
+          : (atts.some(isVid) ? 'reel' : 'image');
+    const files = (kind === 'reel' || kind === 'video') ? [atts.find(isVid) || atts[0]] : atts.filter(a => isImg(a) || !isVid(a));
+    // Ảnh bìa: video feed lấy cột "Ảnh bìa", không có thì lấy ảnh để lẫn trong cột Ảnh/video.
+    // Reel chỉ nhận từ cột "Ảnh bìa" (tránh nhặt nhầm ảnh người dùng đính kèm cho việc khác).
+    const thumbCell = thumbField ? f[thumbField] : null;
+    const thumb = (kind === 'video' || kind === 'reel')
+      ? ((Array.isArray(thumbCell) ? thumbCell : []).find(isImg) || (kind === 'video' ? atts.find(isImg) || null : null))
+      : null;
 
-    L.log(`  >> ${id} | ${targets.length} Page (${targets.map(p => p.name).join(', ')})${unknown.length ? ` | ✖ ${unknown.length} Page không tra được` : ''} | ${kind} | ${files.length} file | "${caption.slice(0, 40).replace(/\n/g, ' ')}"`);
+    L.log(`  >> ${id} | ${targets.length} Page (${targets.map(p => p.name).join(', ')})${unknown.length ? ` | ✖ ${unknown.length} Page không tra được` : ''} | ${kind}${thumb ? ' (có bìa)' : kind === 'video' ? ' (CHƯA có ảnh bìa)' : ''} | ${files.length} file | "${caption.slice(0, 40).replace(/\n/g, ' ')}"`);
     if (DRY) {
       targets.forEach(p => L.log(`     [DRY] sẽ đăng lên ${p.name}${alreadyDone.has(p.fbId) ? ' (đã đăng rồi — bỏ qua)' : ''}`));
       unknown.forEach(u => L.log(`     [DRY] ✖ ${u}: không thấy ở bảng 14.1 → chạy fetch-pages`));
@@ -247,6 +344,11 @@ const postComment = (token, objectId, message) =>
         await L.downloadMedia(tk, files[i].file_token, p, table);
         files[i].path = p; tmp.push(p);
       }
+      if (thumb && targets.length) {
+        const p = path.join(os.tmpdir(), `fbthumb_${id}_${(thumb.name || 'thumb').replace(/[^\w.]/g, '')}`);
+        await L.downloadMedia(tk, thumb.file_token, p, table);
+        thumb.path = p; tmp.push(p);
+      }
 
       for (const pg of targets) {
         if (alreadyDone.has(pg.fbId)) {
@@ -261,8 +363,10 @@ const postComment = (token, objectId, message) =>
         }
         try {
           const res = kind === 'reel'
-            ? await postReel(pg.fbId, pg.token, files[0], caption)
-            : await postPhotos(pg.fbId, pg.token, files, caption);
+            ? await postReel(pg.fbId, pg.token, files[0], caption, thumb)
+            : kind === 'video'
+              ? await postVideo(pg.fbId, pg.token, files[0], caption, thumb)
+              : await postPhotos(pg.fbId, pg.token, files, caption);
 
           // Comment tự động — lỗi comment không được làm hỏng bài đã đăng.
           let note = '';
