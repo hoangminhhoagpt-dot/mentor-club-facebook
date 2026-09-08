@@ -118,6 +118,12 @@ Ghi: Post-ID, Page (liên kết sang 14.1), Nội dung, Link post, Thumbnail (�
 - Bìa hỏng thì **bài vẫn tính là đăng thành công**, chỉ ghi chú vào `Log`. Cố tình làm vậy: nếu đánh dấu thất bại
   thì lần chạy sau sẽ đăng lại lần thứ hai cùng một video.
 - Bỏ trống cột `Ảnh bìa` ⇒ chạy y như trước. Bảng chưa có cột `Ảnh bìa` cũng không sao — engine tự dò, không thấy thì bỏ qua.
+- `Video có bìa` mà cột `Ảnh bìa` trống nhưng cột `Ảnh/video` có kèm ảnh ⇒ engine **lấy tấm ảnh đó làm bìa**.
+  Không muốn vậy thì đừng để ảnh lẫn trong cột `Ảnh/video`.
+- Ảnh bìa hỏng (quá nặng, sai định dạng) làm bước kết thúc upload trượt ⇒ engine **tự đăng lại không kèm bìa**.
+  Video đã tải lên rồi, bỏ đi là phải tải lại từ đầu — mất bìa còn hơn mất bài.
+- Chọn `Video` / `Video có bìa` mà cột `Ảnh/video` **không có file video** ⇒ dòng bị đánh `Thất bại` kèm lời giải thích
+  trong `Log` ngay từ đầu, không tải file lên rồi mới nhận lỗi khó hiểu từ Facebook.
 
 Đăng xong hệ thống ghi ngược lại dòng đó: `Trạng thái`, `Link bài đăng`, `Log`.
 
