@@ -180,7 +180,20 @@ async function postVideo(pageId, token, file, caption, thumbFile) {
   fin.set('upload_session_id', start.upload_session_id);
   if (caption) fin.set('description', caption);
   if (thumbFile) fin.set('thumb', new Blob([fs.readFileSync(thumbFile.path)]), thumbFile.name || 'thumb.jpg');
-  await FB.call(`${FB.GRAPH}/${pageId}/videos`, { method: 'POST', body: fin });
+  try {
+    await FB.call(`${FB.GRAPH}/${pageId}/videos`, { method: 'POST', body: fin });
+  } catch (e) {
+    if (!thumbFile) throw e;
+    // Ảnh bìa hỏng (quá nặng, sai định dạng…) làm pha finish trượt → đăng lại KHÔNG kèm bìa.
+    // Mất bìa còn hơn mất bài: video đã tải lên xong rồi, bỏ đi là phải tải lại từ đầu.
+    L.log(`     ! finish kèm bìa lỗi → đăng lại không kèm bìa: ${String(e.message || e).slice(0, 120)}`);
+    const fin2 = new FormData();
+    fin2.set('access_token', token);
+    fin2.set('upload_phase', 'finish');
+    fin2.set('upload_session_id', start.upload_session_id);
+    if (caption) fin2.set('description', caption);
+    await FB.call(`${FB.GRAPH}/${pageId}/videos`, { method: 'POST', body: fin2 });
+  }
 
   // Ép lại bìa cho chắc — lỗi bìa KHÔNG được làm hỏng bài đã đăng.
   if (thumbFile) {
@@ -317,6 +330,18 @@ const postComment = (token, objectId, message) =>
     const thumb = (kind === 'video' || kind === 'reel')
       ? ((Array.isArray(thumbCell) ? thumbCell : []).find(isImg) || (kind === 'video' ? atts.find(isImg) || null : null))
       : null;
+
+    // Chọn loại video mà cột Ảnh/video không có file video → báo thẳng, đừng để Facebook trả lỗi khó hiểu
+    // sau khi đã tốn công tải file lên.
+    if ((kind === 'reel' || kind === 'video') && !atts.some(isVid)) {
+      const msg = `Loại = "${loai}" nhưng cột Ảnh/video không có file video (đang có: ${atts.map(a => a.name).join(', ') || 'trống'})`;
+      L.log(`  ✖ ${id}: ${msg}`);
+      if (!DRY) await L.updateRecord(tk, table, id, L.buildFields(meta, {
+        'Trạng thái': FAIL,
+        'Log': (L.plain(f['Log']) ? L.plain(f['Log']) + '\n---\n' : '') + `${now()} - ✖ ${msg}`,
+      }));
+      err++; continue;
+    }
 
     L.log(`  >> ${id} | ${targets.length} Page (${targets.map(p => p.name).join(', ')})${unknown.length ? ` | ✖ ${unknown.length} Page không tra được` : ''} | ${kind}${thumb ? ' (có bìa)' : kind === 'video' ? ' (CHƯA có ảnh bìa)' : ''} | ${files.length} file | "${caption.slice(0, 40).replace(/\n/g, ' ')}"`);
     if (DRY) {
